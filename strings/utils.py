@@ -2,7 +2,6 @@ import hashlib
 from collections import Counter
 
 def analyze_string(value):
-
     raw = value.strip()
     hash_id = hashlib.sha256(raw.encode('utf-8')).hexdigest()
 

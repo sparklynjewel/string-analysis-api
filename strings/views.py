@@ -1,28 +1,19 @@
 import json
-
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-
+from django.views.decorators.http import require_http_methods, require_GET
 from .models import AnalyzedString
 from .utils import analyze_string
 
 
 @csrf_exempt
+@require_http_methods(["POST"])
 def create_string(request):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-
     try:
         data = json.loads(request.body)
-        value = data.get('value', '')
-        if value is None:
-            return JsonResponse({'error': 'The "value" field is required.'}, status=400)
+        value = data.get('value', '').strip()
 
-        if not isinstance(value, str):
-            return JsonResponse({'error': '"value" must be a string.'}, status=422)
-
-        if not value.strip():
+        if not value:
             return JsonResponse({'error': '"value" cannot be empty.'}, status=400)
 
         hash_id, props = analyze_string(value)
@@ -44,24 +35,18 @@ def create_string(request):
         return JsonResponse({
             "id": obj.id,
             "value": obj.value,
-            "properties": {
-                "length": obj.length,
-                "is_palindrome": obj.is_palindrome,
-                "unique_characters": obj.unique_characters,
-                "word_count": obj.word_count,
-                "sha256_hash": obj.sha256_hash,
-                "character_frequency_map": obj.character_frequency_map
-            },
+            "properties": props,
             "created_at": obj.created_at.isoformat()
         }, status=201)
 
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
+
 @require_http_methods(["GET"])
 def get_string(request, string_value):
+    hash_id, _ = analyze_string(string_value)
     try:
-        hash_id, _ = analyze_string(string_value)
         obj = AnalyzedString.objects.get(id=hash_id)
         return JsonResponse({
             "id": obj.id,
@@ -79,6 +64,7 @@ def get_string(request, string_value):
     except AnalyzedString.DoesNotExist:
         return JsonResponse({"error": "String not found"}, status=404)
 
+
 @csrf_exempt
 @require_http_methods(["DELETE"])
 def delete_string(request, string_value):
@@ -91,6 +77,7 @@ def delete_string(request, string_value):
         return JsonResponse({"error": "String not found"}, status=404)
 
 
+@require_GET
 def list_strings(request):
     qs = AnalyzedString.objects.all()
     filters_applied = {}
@@ -121,29 +108,26 @@ def list_strings(request):
         qs = qs.filter(word_count=int(word_count))
         filters_applied["word_count"] = int(word_count)
 
-    data = []
-    for obj in qs:
-        data.append({
-            "id": obj.id,
-            "value": obj.value,
-            "properties": {
-                "length": obj.length,
-                "is_palindrome": obj.is_palindrome,
-                "unique_characters": obj.unique_characters,
-                "word_count": obj.word_count,
-                "sha256_hash": obj.sha256_hash,
-                "character_frequency_map": obj.character_frequency_map
-            },
-            "created_at": obj.created_at.isoformat()
-        })
+    data = [{
+        "id": obj.id,
+        "value": obj.value,
+        "properties": {
+            "length": obj.length,
+            "is_palindrome": obj.is_palindrome,
+            "unique_characters": obj.unique_characters,
+            "word_count": obj.word_count,
+            "sha256_hash": obj.sha256_hash,
+            "character_frequency_map": obj.character_frequency_map
+        },
+        "created_at": obj.created_at.isoformat()
+    } for obj in qs]
 
     return JsonResponse({
         "data": data,
-        "count": qs.count(),
+        "count": len(data),
         "filters_applied": filters_applied
     }, status=200)
 
-from django.views.decorators.http import require_GET
 
 @require_GET
 def filter_by_natural_language(request):
@@ -157,7 +141,7 @@ def filter_by_natural_language(request):
         try:
             num = int(query.split("longer than")[1].split("characters")[0].strip())
             qs = qs.filter(length__gt=num)
-        except:
+        except ValueError:
             pass
 
     if "one word" in query or "single word" in query:
@@ -166,21 +150,19 @@ def filter_by_natural_language(request):
     if "unique characters" in query:
         qs = qs.filter(unique_characters__gte=2)
 
-    data = []
-    for obj in qs:
-        data.append({
-            "id": obj.id,
-            "value": obj.value,
-            "properties": {
-                "length": obj.length,
-                "is_palindrome": obj.is_palindrome,
-                "unique_characters": obj.unique_characters,
-                "word_count": obj.word_count,
-                "sha256_hash": obj.sha256_hash,
-                "character_frequency_map": obj.character_frequency_map
-            },
-            "created_at": obj.created_at.isoformat()
-        })
+    data = [{
+        "id": obj.id,
+        "value": obj.value,
+        "properties": {
+            "length": obj.length,
+            "is_palindrome": obj.is_palindrome,
+            "unique_characters": obj.unique_characters,
+            "word_count": obj.word_count,
+            "sha256_hash": obj.sha256_hash,
+            "character_frequency_map": obj.character_frequency_map
+        },
+        "created_at": obj.created_at.isoformat()
+    } for obj in qs]
 
     return JsonResponse({
         "data": data,

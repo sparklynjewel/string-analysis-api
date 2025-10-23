@@ -1,6 +1,5 @@
 from django.db import models
 
-# Create your models here.
 class AnalyzedString(models.Model):
     id = models.CharField(max_length=64, primary_key=True)
     value = models.TextField(unique=True)
