@@ -16,8 +16,14 @@ def create_string(request):
     try:
         data = json.loads(request.body)
         value = data.get('value', '')
-        if not isinstance(value, str) or not value.strip():
-            return JsonResponse({'error': 'Missing or invalid "value"'}, status=400)
+        if value is None:
+            return JsonResponse({'error': 'The "value" field is required.'}, status=400)
+
+        if not isinstance(value, str):
+            return JsonResponse({'error': '"value" must be a string.'}, status=422)
+
+        if not value.strip():
+            return JsonResponse({'error': '"value" cannot be empty.'}, status=400)
 
         hash_id, props = analyze_string(value)
 
@@ -135,4 +141,49 @@ def list_strings(request):
         "data": data,
         "count": qs.count(),
         "filters_applied": filters_applied
+    }, status=200)
+
+from django.views.decorators.http import require_GET
+
+@require_GET
+def filter_by_natural_language(request):
+    query = request.GET.get("query", "").lower()
+    qs = AnalyzedString.objects.all()
+
+    if "palindrome" in query:
+        qs = qs.filter(is_palindrome=True)
+
+    if "longer than" in query and "characters" in query:
+        try:
+            num = int(query.split("longer than")[1].split("characters")[0].strip())
+            qs = qs.filter(length__gt=num)
+        except:
+            pass
+
+    if "one word" in query or "single word" in query:
+        qs = qs.filter(word_count=1)
+
+    if "unique characters" in query:
+        qs = qs.filter(unique_characters__gte=2)
+
+    data = []
+    for obj in qs:
+        data.append({
+            "id": obj.id,
+            "value": obj.value,
+            "properties": {
+                "length": obj.length,
+                "is_palindrome": obj.is_palindrome,
+                "unique_characters": obj.unique_characters,
+                "word_count": obj.word_count,
+                "sha256_hash": obj.sha256_hash,
+                "character_frequency_map": obj.character_frequency_map
+            },
+            "created_at": obj.created_at.isoformat()
+        })
+
+    return JsonResponse({
+        "data": data,
+        "count": len(data),
+        "query": query
     }, status=200)
