@@ -10,37 +10,50 @@ from .utils import analyze_string
 @require_http_methods(["POST"])
 def create_string(request):
     try:
+        # Try to parse JSON
         data = json.loads(request.body)
-        value = data.get('value', '').strip()
-
-        if not value:
-            return JsonResponse({'error': '"value" cannot be empty.'}, status=400)
-
-        hash_id, props = analyze_string(value)
-
-        if AnalyzedString.objects.filter(id=hash_id).exists():
-            return JsonResponse({'error': 'String already exists'}, status=409)
-
-        obj = AnalyzedString.objects.create(
-            id=hash_id,
-            value=value,
-            length=props["length"],
-            is_palindrome=props["is_palindrome"],
-            unique_characters=props["unique_characters"],
-            word_count=props["word_count"],
-            sha256_hash=props["sha256_hash"],
-            character_frequency_map=props["character_frequency_map"]
-        )
-
-        return JsonResponse({
-            "id": obj.id,
-            "value": obj.value,
-            "properties": props,
-            "created_at": obj.created_at.isoformat()
-        }, status=201)
-
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        return JsonResponse({"error": "Invalid JSON format"}, status=400)
+
+    value = data.get("value", None)
+
+    # Handle missing 'value' field
+    if value is None:
+        return JsonResponse({"error": 'Missing "value" field'}, status=400)
+
+    # Handle wrong type
+    if not isinstance(value, str):
+        return JsonResponse({"error": '"value" must be a string'}, status=422)
+
+    # Handle empty string
+    if not value.strip():
+        return JsonResponse({"error": '"value" cannot be empty'}, status=400)
+
+    # Analyze string and generate hash
+    hash_id, props = analyze_string(value)
+
+    # Handle duplicate
+    if AnalyzedString.objects.filter(id=hash_id).exists():
+        return JsonResponse({"error": "String already exists"}, status=409)
+
+    # Save new object
+    obj = AnalyzedString.objects.create(
+        id=hash_id,
+        value=value,
+        length=props["length"],
+        is_palindrome=props["is_palindrome"],
+        unique_characters=props["unique_characters"],
+        word_count=props["word_count"],
+        sha256_hash=props["sha256_hash"],
+        character_frequency_map=props["character_frequency_map"]
+    )
+
+    return JsonResponse({
+        "id": obj.id,
+        "value": obj.value,
+        "properties": props,
+        "created_at": obj.created_at.isoformat()
+    }, status=201)
 
 
 @require_http_methods(["GET"])
